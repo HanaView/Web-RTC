@@ -237,7 +237,8 @@
     } catch (error) {
       console.error('Error accessing screen share: ', error);
     }
-}
+  }
+  
   function toggleMute() {
     if (localStream) {
       const audioTrack = localStream.getAudioTracks()[0];
