@@ -1,128 +1,185 @@
 <!DOCTYPE html>
 <html>
-<head>
-  <title>WebRTC Video Call</title>
-  <style>
-    video {
-      width: 300px;
-      height: 200px;
-      cursor: pointer; /* 비디오에 커서 모양을 추가 */
-    }
-    
-    #largeVideoContainer {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      display: none;
-    }
-    
-    #largeVideo {
-      width: 800px;
-      height: 600px;
-      z-index: 1000;
-    }
-  </style>
-</head>
-<body>  
-  <video id="localVideo" autoplay playsinline></video>
-  <video id="remoteVideo" autoplay playsinline></video>
-  
-  <!-- 큰 비디오 화면을 위한 컨테이너 추가 -->
-  <div id="largeVideoContainer">
-    <video id="largeVideo" autoplay playsinline></video>
-  </div>
-  
-  <!-- 화면 공유 버튼 추가 -->
-  <button onclick="startScreenShare()">화면 공유 시작</button>
-  
-  <script>
-    const signalingServer = new WebSocket('ws://172.16.21.235:8080/WebRTC/WebRTC/signaling');
-    const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
-    const peerConnection = new RTCPeerConnection(configuration);
-    let localStream;
-
-    // Get local media stream
-    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-      .then(stream => {
-        localStream = stream;
-        document.getElementById('localVideo').srcObject = stream;
-        stream.getTracks().forEach(track => peerConnection.addTrack(track, stream));
-      })
-      .catch(error => console.error('Error accessing media devices.', error));
-
-    // Handle ICE candidates
-    peerConnection.onicecandidate = event => {
-      if (event.candidate) {
-        signalingServer.send(JSON.stringify({ candidate: event.candidate }));
+  <head>
+    <title>WebRTC Screen Sharing</title>
+    <style>
+      video {
+        width: 300px;
+        height: 200px;
+        cursor: pointer;
       }
-    };
-
-    // Handle remote stream
-    peerConnection.ontrack = event => {
-      document.getElementById('remoteVideo').srcObject = event.streams[0];
-    };
-
-    // Handle signaling messages
-    signalingServer.onmessage = async message => {
-      const data = JSON.parse(message.data);
-
-      if (data.offer) {
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
-        const answer = await peerConnection.createAnswer();
-        await peerConnection.setLocalDescription(answer);
-        signalingServer.send(JSON.stringify({ answer: peerConnection.localDescription }));
-      } else if (data.answer) {
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-      } else if (data.candidate) {
-        await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+      #largeVideoContainer {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        display: none;
       }
-    };
-
-    // Create and send offer
-    async function createOffer() {
-      const offer = await peerConnection.createOffer();
-      await peerConnection.setLocalDescription(offer);
-      signalingServer.send(JSON.stringify({ offer: peerConnection.localDescription }));
-    }
-
-    // Simulate user action to start the connection
-    setTimeout(createOffer, 1000); // Wait a bit before starting the offer
-
-    // Video click event to enlarge video
-    document.getElementById('localVideo').addEventListener('click', function() {
-      enlargeVideo(this);
-    });
-
-    document.getElementById('remoteVideo').addEventListener('click', function() {
-      enlargeVideo(this);
-    });
-
-    document.getElementById('largeVideoContainer').addEventListener('click', function() {
-      closeLargeVideo();
-    });
-
-    function enlargeVideo(videoElement) {
-      const largeVideoContainer = document.getElementById('largeVideoContainer');
-      const largeVideo = document.getElementById('largeVideo');
-      largeVideo.srcObject = videoElement.srcObject;
-      largeVideoContainer.style.display = 'block';
-    }
-
-    function closeLargeVideo() {
-      const largeVideoContainer = document.getElementById('largeVideoContainer');
-      largeVideoContainer.style.display = 'none';
-    }
-
-    // 화면 공유 시작 함수
-    async function startScreenShare() {
-      try {
-        const screenShareStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-        peerConnection.addTrack(screenShareStream.getTracks()[0], screenShareStream);
-      } catch (error) {
-        console.error('Error accessing screen share:', error);
+      #largeVideo {
+        width: 800px;
+        height: 600px;
+        z-index: 1000;
       }
-    }
-  </script>
-</body>
+    </style>
+  </head>
+  <body>
+    <video id="localVideo" autoplay playsinline></video>
+    <video id="remoteVideo" autoplay playsinline></video>
+
+    <video id="shareVideo" autoplay playsinline></video>
+
+    <div id="largeVideoContainer">
+      <video id="largeVideo" autoplay playsinline></video>
+    </div>
+    <button onclick="startScreenShare()">화면 공유 시작</button>
+
+    <!-- 음소거 버튼 -->
+    <button id="muteButton" onclick="toggleMute()">전체 음소거</button>
+    <script>
+      const signalingServer = new WebSocket(
+        //        'ws://172.16.21.235:8080/WebRTC/WebRTC/signaling'
+        'ws://127.0.0.1:8080/WebRTC/signaling'
+      );
+      const configuration = {
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+      };
+      const peerConnection = new RTCPeerConnection(configuration);
+      let localStream;
+
+      navigator.mediaDevices
+        .getUserMedia({ video: true, audio: true })
+        .then((stream) => {
+          localStream = stream;
+          document.getElementById('localVideo').srcObject = stream;
+          stream
+            .getTracks()
+            .forEach((track) => peerConnection.addTrack(track, stream));
+        })
+        .catch((error) =>
+          console.error('Error accessing media devices.', error)
+        );
+
+      peerConnection.onicecandidate = (event) => {
+        if (event.candidate) {
+          signalingServer.send(JSON.stringify({ candidate: event.candidate }));
+        }
+      };
+
+      peerConnection.ontrack = (event) => {
+        document.getElementById('remoteVideo').srcObject = event.streams[0];
+      };
+
+      signalingServer.onmessage = async (message) => {
+        const data = JSON.parse(message.data);
+
+        if (data.offer) {
+          await peerConnection.setRemoteDescription(
+            new RTCSessionDescription(data.offer)
+          );
+          const answer = await peerConnection.createAnswer();
+          await peerConnection.setLocalDescription(answer);
+          signalingServer.send(
+            JSON.stringify({ answer: peerConnection.localDescription })
+          );
+        } else if (data.answer) {
+          await peerConnection.setRemoteDescription(
+            new RTCSessionDescription(data.answer)
+          );
+        } else if (data.candidate) {
+          await peerConnection.addIceCandidate(
+            new RTCIceCandidate(data.candidate)
+          );
+        }
+      };
+
+      async function createOffer() {
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+        signalingServer.send(
+          JSON.stringify({ offer: peerConnection.localDescription })
+        );
+      }
+
+      setTimeout(createOffer, 1000);
+
+      document
+        .getElementById('localVideo')
+        .addEventListener('click', function () {
+          enlargeVideo(this);
+        });
+
+      document
+        .getElementById('remoteVideo')
+        .addEventListener('click', function () {
+          enlargeVideo(this);
+        });
+
+      document
+        .getElementById('largeVideoContainer')
+        .addEventListener('click', function () {
+          closeLargeVideo();
+        });
+
+      function enlargeVideo(videoElement) {
+        const largeVideoContainer = document.getElementById(
+          'largeVideoContainer'
+        );
+        const largeVideo = document.getElementById('largeVideo');
+        largeVideo.srcObject = videoElement.srcObject;
+        largeVideoContainer.style.display = 'block';
+      }
+
+      function closeLargeVideo() {
+        const largeVideoContainer = document.getElementById(
+          'largeVideoContainer'
+        );
+        largeVideoContainer.style.display = 'none';
+      }
+
+      async function startScreenShare() {
+        console.log('Requesting screen share');
+
+        window.postMessage({ type: 'SCREEN_SHARE_REQUEST' }, '*');
+      }
+
+      window.addEventListener('message', async (event) => {
+        if (
+          event.data.type === 'SCREEN_SHARE_RESPONSE' &&
+          event.data.streamId
+        ) {
+          try {
+            console.log('Screen share response received:', event.data.streamId);
+            const screenStream = await navigator.mediaDevices.getUserMedia({
+              video: {
+                mandatory: {
+                  chromeMediaSource: 'desktop',
+                  chromeMediaSourceId: event.data.streamId,
+                },
+              },
+            });
+            document.getElementById('shareVideo').srcObject = screenStream;
+            screenStream
+              .getTracks()
+              .forEach((track) => peerConnection.addTrack(track, screenStream));
+          } catch (error) {
+            console.error('Error accessing screen share:', error);
+          }
+        }
+      });
+
+      // 음소거
+      function toggleMute() {
+        if (localStream) {
+          const audioTrack = localStream.getAudioTracks()[0];
+          if (audioTrack.enabled) {
+            audioTrack.enabled = false;
+            document.getElementById('muteButton').innerText = '음소거 해제';
+          } else {
+            audioTrack.enabled = true;
+            document.getElementById('muteButton').innerText = '음소거';
+          }
+        }
+      }
+    </script>
+  </body>
 </html>
