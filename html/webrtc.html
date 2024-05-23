@@ -238,6 +238,7 @@
         document.getElementById('remoteVideo').srcObject = event.streams[0];
       };
 
+
       async function createOffer() {
         dataChannel = peerConnection.createDataChannel('chat');
         dataChannel.onopen = () => {
@@ -252,6 +253,26 @@
         await peerConnection.setLocalDescription(offer);
         sendMessage({ offer: peerConnection.localDescription });
         console.log('Offer created and sent:', offer);
+
+    }
+
+    // 최대 메시지 크기 설정
+    const MAX_MESSAGE_SIZE = 4 * 1024; // 4KB
+
+    function sendMessage(message) {
+      if (isConnected) {
+        const jsonString = JSON.stringify(message);
+        const totalParts = Math.ceil(jsonString.length / MAX_MESSAGE_SIZE);
+        
+        for (let i = 0; i < totalParts; i++) {
+          const messagePart = jsonString.slice(i * MAX_MESSAGE_SIZE, (i + 1) * MAX_MESSAGE_SIZE);
+          const partMessage = JSON.stringify({ part: i, total: totalParts, content: messagePart });
+          signalingServer.send(partMessage);
+        }
+      } else {
+        console.error('WebSocket이 연결되지 않았습니다. 메시지를 보내지 못했습니다:', message);
+        messageQueue.push(message);
+
       }
 
       setTimeout(createOffer, 1000);
@@ -289,6 +310,7 @@
         );
         largeVideoContainer.style.display = 'none';
       }
+
 
       async function startScreenShare() {
         try {
@@ -376,6 +398,68 @@
               );
             }
           }
+          
+      screenShareStream.getTracks().forEach(track => {
+        peerConnection.addTrack(track, screenShareStream);
+      });
+
+      const offer = await peerConnection.createOffer();
+      await peerConnection.setLocalDescription(offer);
+      sendMessage({ offer: peerConnection.localDescription }); // 여기에서 수정
+    } catch (error) {
+      console.error('Error accessing screen share: ', error);
+    }
+  }
+  
+  function toggleMute() {
+    if (localStream) {
+      const audioTrack = localStream.getAudioTracks()[0];
+      if (audioTrack.enabled) {
+        audioTrack.enabled = false;
+        document.getElementById('muteButton').innerText = '음소거 해제';
+      } else {
+        audioTrack.enabled = true;
+        document.getElementById('muteButton').innerText = '음소거';
+      }
+    }
+  }
+
+  function sendIceCandidates() {
+    if (isConnected) {
+      while (iceCandidatesQueue.length > 0) {
+        sendMessage({ candidate: iceCandidatesQueue.shift() });
+      }
+    } else {
+      console.error('WebSocket이 연결되지 않았습니다. ICE 후보를 보내지 못했습니다.');
+    }
+  }
+
+  // 메시지 재조립을 위한 변수
+  let incomingParts = [];
+  let totalParts = 0;
+
+  signalingServer.onmessage = async (message) => {
+    console.log('메시지 조각 수신:', message.data);
+    
+    const data = JSON.parse(message.data);
+    
+    if (data.part !== undefined && data.total !== undefined && data.content !== undefined) {
+      if (totalParts === 0) {
+        totalParts = data.total;
+      }
+      
+      incomingParts[data.part] = data.content;
+      if (incomingParts.filter(Boolean).length === totalParts) {
+        const completeMessage = incomingParts.join('');
+        incomingParts = [];
+        totalParts = 0;
+        
+        try {
+          const completeData = JSON.parse(completeMessage);
+          processMessage(completeData);
+        } catch (error) {
+          console.error('완전한 메시지를 파싱하는 중 오류가 발생했습니다:', error);
+
         }
       };
 
@@ -428,6 +512,22 @@
             sendChatMessage();
           }
         });
-    </script>
-  </body>
+
+  function processMessage(data) {
+    if (data.offer) {
+      console.log('오퍼 수신:', data.offer);
+      peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer))
+        .then(() => peerConnection.createAnswer())
+        .then(answer => peerConnection.setLocalDescription(answer))
+        .then(() => sendMessage({ answer: peerConnection.localDescription }));
+    } else if (data.answer) {
+      console.log('응답 수신:', data.answer);
+      peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+    } else if (data.candidate) {
+      console.log('ICE 후보 수신:', data.candidate);
+      peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+    }
+  }
+</script>
+</body>
 </html>
