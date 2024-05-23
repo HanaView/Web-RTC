@@ -76,6 +76,26 @@
     <!-- 음소거 버튼 -->
     <button id="muteButton" onclick="toggleMute()">전체 음소거</button>
 
+    <!-- 텍스트 채팅 UI 추가 -->
+    <div id="chatContainer">
+      <div
+        id="chatLog"
+        style="
+          border: 1px solid #ccc;
+          width: 200px;
+          height: 200px;
+          overflow-y: scroll;
+        "
+      ></div>
+      <input
+        type="text"
+        id="chatInput"
+        placeholder="메시지를 입력하세요..."
+        style="width: 200px"
+      />
+      <button onclick="sendChatMessage()">전송</button>
+    </div>
+
     <script>
       let signalingServer;
       let isConnected = false;
@@ -83,6 +103,7 @@
       let iceCandidatesQueue = [];
       let localStream; // 로컬 스트림 변수 추가
       let reconnectAttempts = 0;
+      let dataChannel; // WebRTC 기반의 텍스트 채팅을 구현
 
       function initializeWebSocket() {
         signalingServer = new WebSocket('ws://127.0.0.1:8080/WebRTC/signaling');
