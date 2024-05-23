@@ -20,7 +20,7 @@ public class SignalingHandler extends TextWebSocketHandler {
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
         for (WebSocketSession s : sessions) {
-            if (s.isOpen() && !s.getId().equals(session.getId())) {
+            if (s != null && s.isOpen() && !s.getId().equals(session.getId())) {
                 s.sendMessage(message);
             }
         }
@@ -29,6 +29,13 @@ public class SignalingHandler extends TextWebSocketHandler {
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
         sessions.remove(session);
+    }
+
+    // Null Pointer Exception 처리
+    @Override
+    public void handleTransportError(WebSocketSession session, Throwable exception) throws Exception {
+        sessions.remove(session);
+        session.close(CloseStatus.SERVER_ERROR);
     }
 }
 
