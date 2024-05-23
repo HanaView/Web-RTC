@@ -46,6 +46,18 @@
         width: 200px;
         height: auto;
       }
+
+      #chatContainer {
+        border: 1px solid #ccc;
+        width: 200px;
+        height: 200px;
+        overflow-y: scroll;
+        margin-bottom: 10px;
+      }
+
+      #chatInput {
+        width: 200px;
+      }
     </style>
   </head>
   <body>
@@ -77,24 +89,9 @@
     <button id="muteButton" onclick="toggleMute()">전체 음소거</button>
 
     <!-- 텍스트 채팅 UI 추가 -->
-    <div id="chatContainer">
-      <div
-        id="chatLog"
-        style="
-          border: 1px solid #ccc;
-          width: 200px;
-          height: 200px;
-          overflow-y: scroll;
-        "
-      ></div>
-      <input
-        type="text"
-        id="chatInput"
-        placeholder="메시지를 입력하세요..."
-        style="width: 200px"
-      />
-      <button onclick="sendChatMessage()">전송</button>
-    </div>
+    <div id="chatContainer"></div>
+    <input type="text" id="chatInput" placeholder="메시지를 입력하세요..." />
+    <button onclick="sendChatMessage()">전송</button>
 
     <script>
       let signalingServer;
@@ -200,6 +197,19 @@
       };
       const peerConnection = new RTCPeerConnection(configuration);
 
+      // 데이터 채널 생성
+      peerConnection.ondatachannel = (event) => {
+        dataChannel = event.channel;
+
+        dataChannel.onopen = () => {
+          console.log('@@데이터 채널이 열렸습니다.');
+        };
+        dataChannel.onmessage = (event) => {
+          console.log('@@받은 메시지:', event.data);
+          displayChatMessage('Remote', event.data);
+        };
+      };
+
       navigator.mediaDevices
         .getUserMedia({ video: true, audio: true })
         .then((stream) => {
@@ -229,6 +239,15 @@
       };
 
       async function createOffer() {
+        dataChannel = peerConnection.createDataChannel('chat');
+        dataChannel.onopen = () => {
+          console.log('@@데이터 채널이 열렸습니다.');
+        };
+        dataChannel.onmessage = (event) => {
+          console.log('받은 메시지:', event.data);
+          displayChatMessage('Remote', event.data);
+        };
+
         const offer = await peerConnection.createOffer();
         await peerConnection.setLocalDescription(offer);
         sendMessage({ offer: peerConnection.localDescription });
@@ -379,6 +398,26 @@
           console.log('ICE 후보 수신:', data.candidate);
           peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
         }
+      }
+
+      // 채팅 메시지 전송 함수
+      function sendChatMessage() {
+        const chatInput = document.getElementById('chatInput');
+        const message = chatInput.value;
+        if (message && dataChannel.readyState === 'open') {
+          dataChannel.send(message);
+          displayChatMessage('Local', message);
+          chatInput.value = '';
+        }
+      }
+
+      // 채팅 메시지 표시 함수
+      function displayChatMessage(sender, message) {
+        const chatLog = document.getElementById('chatContainer');
+        const messageElement = document.createElement('div');
+        messageElement.textContent = `${sender}: ${message}`;
+        chatLog.appendChild(messageElement);
+        chatLog.scrollTop = chatLog.scrollHeight; // 새 메시지가 표시되도록 스크롤 조정
       }
     </script>
   </body>
