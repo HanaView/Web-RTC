@@ -419,6 +419,15 @@
         chatLog.appendChild(messageElement);
         chatLog.scrollTop = chatLog.scrollHeight; // 새 메시지가 표시되도록 스크롤 조정
       }
+
+      // Enter 키로 채팅 메시지 전송
+      document
+        .getElementById('chatInput')
+        .addEventListener('keyup', (event) => {
+          if (event.key === 'Enter') {
+            sendChatMessage();
+          }
+        });
     </script>
   </body>
 </html>
