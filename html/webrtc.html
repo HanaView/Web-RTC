@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <title>WebRTC Video Call</title>
   <style>
@@ -59,29 +60,31 @@
     }
   </style>
 </head>
+
 <body>
+  <!-- 비디오 컨테이너 -->
   <div id="videoContainer">
-    <!-- Local video -->
+    <!-- 로컬 비디오 -->
     <div class="video-wrapper">
       <video id="localVideo" class="video" autoplay playsinline></video>
     </div>
-    <!-- Remote video -->
+    <!-- 원격 비디오 -->
     <div class="video-wrapper">
       <video id="remoteVideo" class="video" autoplay playsinline></video>
     </div>
-    <!-- Screen share video -->
+    <!-- 화면 공유 비디오 -->
     <div id="screenShareContainer">
       <video id="screenShareVideo" class="video" autoplay playsinline></video>
     </div>
   </div>
 
-  <!-- Large video container -->
+  <!-- 큰 화면 비디오 컨테이너 -->
   <div id="largeVideoContainer">
     <video id="largeVideo" autoplay playsinline></video>
   </div>
 
-  <!-- Screen share button -->
-  <button onclick="startScreenShare()">Start Screen Share</button>
+  <!-- 화면 공유 버튼 -->
+  <button onclick="startScreenShare()">화면 공유 시작</button>
 
   <!-- 음소거 버튼 -->
   <button id="muteButton" onclick="toggleMute()">전체 음소거</button>
@@ -91,30 +94,37 @@
   <input type="text" id="chatInput" placeholder="메시지를 입력하세요..." />
   <button onclick="sendChatMessage()">전송</button>
 
+  <!-- JavaScript -->
   <script>
-    let signalingServer;
-    let isConnected = false;
-    let messageQueue = [];
-    let iceCandidatesQueue = [];
-    let localStream;
-    let screenShareStream;
-    let reconnectAttempts = 0;
-    let dataChannel;
+    /* WebSocket 및 연결 상태 관련 변수 초기화 */
+    let signalingServer;     // 시그널링 서버를 통해 통신 및 피어간의 연결을 설정
+    let isConnected = false; // WebSocket 연결 상태: 연결 성공시 true로 설정
+    let messageQueue = []; // 연결이 성립되기 전에 발신되는 모든 메시지를 저장. 연결이 성립되면 큐에 있는 모든 메시지가 시그널링 서버로 전송
+    let iceCandidatesQueue = []; // ICE(Interactive Connectivity Establishment) 후보자의 큐. ICE 후보자는 피어 간의 연결을 설정하는 데 사용됩니다. 연결이 성립되기 전에 생성된 모든 ICE 후보자가 여기에 저장
+    let localStream; // 로컬 사용자의 미디어 스트림. 이는 사용자의 웹캠과 마이크로부터 얻은 비디오 및 오디오 데이터를 포함
+    let screenShareStream; // 화면 공유를 위한 미디어 스트림. 사용자가 화면을 공유하면 이 스트림에 화면 캡처 데이터가 포함
+    let reconnectAttempts = 0; // 연결 재시도 횟수.  WebSocket 연결이 닫힌 경우 재시도를 위해 사용
+    let dataChannel; // 채팅용. 데이터 채널은 피어 간의 텍스트 메시지를 교환하는 데 사용
 
+    /* WebSocket 초기화 함수 */
     function initializeWebSocket() {
+      // 시그널링 서버 url
       signalingServer = new WebSocket('ws://127.0.0.1:8080/WebRTC/signaling');
 
+      // WebSocket 이벤트 핸들러 설정
+
       signalingServer.onopen = () => {
-        console.log('WebSocket connection opened');
+        console.log('웹소켓 열렸어요');
         isConnected = true;
         reconnectAttempts = 0;
 
-        // Send queued messages
+        // 웹소켓 연결 전, 큐에 보낼 메시지 저장됨
+        // 연결되면 큐에 저장된 메시지 전송됨
         while (messageQueue.length > 0) {
           signalingServer.send(JSON.stringify(messageQueue.shift()));
         }
 
-        // Send queued ICE candidates
+        //  ICE 후보자를 큐에 저장하고, WebSocket 연결이 열리면 큐에 저장된 ICE 후보자들을 시그널링 서버로 전송하는 역할
         sendIceCandidates();
       };
 
@@ -304,8 +314,12 @@
       }
     }
 
+    // WebRTC 연결 설정 과정에서 매우 중요
+    // 피어 간의 원활한 연결을 위해 반드시 ICE 후보자들을 교환해야 하며, sendIceCandidates() 함수가 이 과정을 담당
     function sendIceCandidates() {
+      // WebSocket 연결 상태를 확인
       if (isConnected) {
+        // 큐에 저장된 ICE 후보자들을 하나씩 꺼내서 sendMessage() 함수를 통해 시그널링 서버로 전송
         while (iceCandidatesQueue.length > 0) {
           sendMessage({ ice: iceCandidatesQueue.shift() });
         }
@@ -368,4 +382,5 @@
     }
   </script>
 </body>
+
 </html>
