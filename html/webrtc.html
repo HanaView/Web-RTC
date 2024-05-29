@@ -106,13 +106,12 @@
     let reconnectAttempts = 0; // 연결 재시도 횟수.  WebSocket 연결이 닫힌 경우 재시도를 위해 사용
     let dataChannel; // 채팅용. 데이터 채널은 피어 간의 텍스트 메시지를 교환하는 데 사용
 
-    /* WebSocket 초기화 함수 */
+    // WebSocket 초기화 함수 
     function initializeWebSocket() {
       // 시그널링 서버 url
       signalingServer = new WebSocket('ws://127.0.0.1:8080/WebRTC/signaling');
 
       // WebSocket 이벤트 핸들러 설정
-
       signalingServer.onopen = () => {
         console.log('웹소켓 열렸어요');
         isConnected = true;
@@ -151,8 +150,10 @@
       };
     }
 
+    // 최대 메시지 크기
     const MAX_MESSAGE_SIZE = 4 * 1024; // 4KB
 
+    // WebSocket을 통해 메시지 전송
     function sendMessage(message) {
       if (isConnected) {
         const jsonString = JSON.stringify(message);
@@ -179,13 +180,19 @@
       }
     }
 
+    // WebSocket 초기화
     initializeWebSocket();
 
+    // Peer 연결 설정
     const configuration = {
       iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
     };
+
+    // WebRTC 피어 간의 연결을 설정하는 데 사용되는 RTCPeerConnection 객체를 생성
+    // 두 클라이언트 간의 오디오, 비디오 및 데이터 스트림을 관리하고 전송하는 데 사용
     const peerConnection = new RTCPeerConnection(configuration);
 
+    // 채팅용 데이터 채널 생성
     peerConnection.ondatachannel = (event) => {
       dataChannel = event.channel;
 
@@ -198,51 +205,66 @@
       };
     };
 
+    // 미디어 스트림 가져오기
     navigator.mediaDevices
       .getUserMedia({ video: true, audio: true })
       .then((stream) => {
+        // 사용자의 카메라와 마이크에 접근하여 비디오와 오디오 스트림을 요청한걸 저장
         localStream = stream;
+        // HTML 비디오 요소에 로컬 스트림을 설정하여 화면에 비디오를 표시합니다.
         document.getElementById('localVideo').srcObject = stream;
-        console.log('Local stream obtained:', stream);
+        console.log('로컬 미디어 스트림 저장됨:', stream);
+
+        // 스트림 객체는 여러 트랙(오디오 및 비디오 트랙)을 포함합니다.
+        // getTracks() 메서드는 스트림의 모든 트랙을 배열로 반환
         stream.getTracks().forEach((track) => {
-          console.log('Adding track:', track);
-          peerConnection.addTrack(track, stream);
+          console.log('로컬 미디어 스트림에 각 트랙을 추가:', track);
+          peerConnection.addTrack(track, stream); // 피어 연결 객체(RTCPeerConnection)에 로컬 미디어 스트림의 각 트랙을 추가
         });
       })
       .catch((error) =>
         console.error('Error accessing media devices.', error)
       );
 
+    // ICE candidate 이벤트 핸들러 설정
     peerConnection.onicecandidate = (event) => {
       if (event.candidate) {
-        console.log('Generated ICE candidate:', event.candidate);
+        console.log('ICE candidate 생성:', event.candidate);
         iceCandidatesQueue.push(event.candidate);
         sendIceCandidates();
       }
     };
 
+        // 원격 스트림 이벤트 핸들러 설정
     peerConnection.ontrack = (event) => {
-      console.log('Received remote stream:', event.streams[0]);
+      // 격 피어에서 전송된 스트림의 배열이며, 일반적으로 하나의 MediaStream 객체를 포함
+      console.log('원격 피어로부터 수신된 스트림 배열:', event.streams[0]);
       document.getElementById('remoteVideo').srcObject = event.streams[0];
     };
 
+    // 스트림 정보 주고받기
     async function createOffer() {
+      // 채팅용 데이터 채널
       dataChannel = peerConnection.createDataChannel('chat');
       dataChannel.onopen = () => {
-        console.log('데이터 채널이 열렸습니다.');
+        console.log('채팅용) 데이터 채널이 열렸습니다.');
       };
       dataChannel.onmessage = (event) => {
         console.log('받은 메시지:', event.data);
         displayChatMessage('Remote', event.data);
       };
 
+      // 로컬에서 오퍼 생성
       const offer = await peerConnection.createOffer();
       await peerConnection.setLocalDescription(offer);
       sendMessage({ offer: peerConnection.localDescription });
-      console.log('Offer created and sent:', offer);
+      console.log('오퍼 생성 및 전송:', offer);
     }
 
+        // Offer 생성 함수 호출
     setTimeout(createOffer, 1000);
+
+        // 비디오 확대 이벤트 리스너 설정
 
     document.getElementById('localVideo').addEventListener('click', function () {
       enlargeVideo(this);
